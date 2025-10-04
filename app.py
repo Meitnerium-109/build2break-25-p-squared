@@ -4,7 +4,7 @@ import requests
 import time
 
 # --- Configuration ---
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "https://aegis-backend-5ob5.onrender.com"
 CHAT_API_URL = f"{API_BASE_URL}/chat"
 UPLOAD_API_URL = f"{API_BASE_URL}/upload"
 DOCS_API_URL = f"{API_BASE_URL}/documents"
