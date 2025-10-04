@@ -2,7 +2,7 @@
 # Aegis HR - Agentic HR Automation (Hardened)
 
 **Version:** 2.3.0
-**Repository:** [Link to your GitHub repo]
+**Repository:** [https://github.com/OSDG-IIITH/build2break-25-p-squared]
 
 This document provides instructions for setting up and running the Aegis HR application locally using a standard Python environment.
 
