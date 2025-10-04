@@ -81,7 +81,7 @@ class VectorStoreManager:
                 docs = sanitized_docs
 
             # Add the documents to the persistent vector store
-            self.vector_store.add_documents(docs)
+            self.vector_store.add_documents(sanitized_docs)
             
             print(f"--- Document '{uploaded_file.filename}' added successfully. ---")
             print(f"New document count: {self.vector_store._collection.count()}")
