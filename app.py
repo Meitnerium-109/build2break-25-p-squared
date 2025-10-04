@@ -78,6 +78,11 @@ with st.sidebar:
     else:
         st.info("No resumes have been uploaded yet.")
 
+    st.divider()
+    if st.button("Clear Chat History"):
+        st.session_state.messages = [{"role": "assistant", "content": "Hello! I am Aegis HR. How can I help?"}]
+        st.rerun()
+
 # --- Chat Interface ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=USER_AVATAR if message["role"] == "user" else AGENT_AVATAR):
