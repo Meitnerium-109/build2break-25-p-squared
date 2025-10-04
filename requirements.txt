@@ -11,3 +11,5 @@ faiss-cpu
 streamlit
 requests
 tenacity
+chromadb
+python-multipart
