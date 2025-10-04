@@ -5,6 +5,9 @@ from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+# Local Imports
+from security import create_guardrails_agent, sanitize_text_chunk # Import sanitize_text_chunk
+
 # --- Configuration ---
 PERSIST_DIRECTORY = "chroma_db"
 CHROMA_COLLECTION_NAME = "hr_documents"
@@ -14,8 +17,9 @@ class VectorStoreManager:
     Manages the persistent vector store for the application.
     Handles initialization, adding documents, and providing a retriever.
     """
-    def __init__(self, embeddings):
+    def __init__(self, embeddings, llm=None):  # Added llm as an argument
         self.embeddings = embeddings
+        self.llm = llm # Store the llm instance
         
         # Initialize the persistent ChromaDB client
         self.client = chromadb.PersistentClient(path=PERSIST_DIRECTORY)
@@ -26,6 +30,12 @@ class VectorStoreManager:
             collection_name=CHROMA_COLLECTION_NAME,
             embedding_function=self.embeddings,
         )
+        
+        # Initialize the guardrails agent here to avoid re-initialization
+        self.guardrails_agent = None
+        if self.llm:
+            self.guardrails_agent = create_guardrails_agent(self.llm) # Use self.llm
+        
         print(f"--- VectorStoreManager initialized. Using '{PERSIST_DIRECTORY}' for storage. ---")
         print(f"Current document count: {self.vector_store._collection.count()}")
 
@@ -57,6 +67,18 @@ class VectorStoreManager:
             # Split the document into chunks
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             docs = text_splitter.split_documents(documents)
+
+            # Sanitize each document chunk before adding it to the vector store
+            if self.guardrails_agent:
+                sanitized_docs = []
+                for doc in docs:
+                    # Ensure doc has page_content attribute
+                    if hasattr(doc, 'page_content'):
+                        doc.page_content = sanitize_text_chunk(doc.page_content, self.guardrails_agent)
+                    else:
+                        print(f"Warning: Document chunk missing 'page_content'. Skipping sanitization.")
+                    sanitized_docs.append(doc)
+                docs = sanitized_docs
 
             # Add the documents to the persistent vector store
             self.vector_store.add_documents(docs)

@@ -5,12 +5,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
 from typing import List
+import re
 
 # LangChain Imports
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain.tools import Tool
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.agents import AgentExecutor
+from langchain.schema.output_parser import OutputParserException
 
 # Local Imports
 from vectorstore_manager import VectorStoreManager
@@ -19,6 +21,7 @@ from onboarder import create_onboarder_chain
 from policy_bot import create_policy_retriever, create_policy_bot_chain
 from bias_checker import create_bias_checker_chain
 from orchestrator import create_orchestrator
+from security import create_guardrails_agent # Import GuardrailsAgent
 
 # --- Configuration ---
 load_dotenv()
@@ -46,20 +49,21 @@ class DocumentListResponse(BaseModel):
 # --- FastAPI App Initialization ---
 app = FastAPI(
     title="Aegis HR - Agentic HR Automation (Hardened)",
-    description="A robust API for the multi-agent HR system.",
-    version="2.2.0" # Version bump for bias checker
+    description="A robust API for the multi-agent HR system with security enhancements.",
+    version="2.3.0" # Version bump for security features and bias checker
 )
 
 # --- Global Components ---
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3, google_api_key=API_KEY)
 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=API_KEY)
-vector_store_manager = VectorStoreManager(embeddings=embeddings)
+vector_store_manager = VectorStoreManager(embeddings=embeddings, llm=llm) # Pass llm here for sanitization
 orchestrator: AgentExecutor = None
+guardrails_agent = None # Initialize later
 
 # --- FastAPI Startup Event ---
 @app.on_event("startup")
 async def startup_event():
-    global orchestrator
+    global orchestrator, guardrails_agent
     print("--- Server is starting up, initializing AI agent... ---")
     
     retriever = vector_store_manager.get_retriever()
@@ -71,6 +75,7 @@ async def startup_event():
     policy_retriever = create_policy_retriever("policies/company_policies.txt", embeddings)
     policy_bot_chain = create_policy_bot_chain(policy_retriever, llm)
     bias_checker_chain = create_bias_checker_chain(llm) # CREATE BIAS CHECKER FIRST
+    guardrails_agent = create_guardrails_agent(llm) # Initialize GuardrailsAgent
 
     # 2. Now create the TalentScout chain, which depends on the bias checker
     talent_scout_chain = create_talent_scout_chain(retriever, llm, bias_checker_chain)
@@ -123,12 +128,23 @@ async def chat(request: ChatRequest):
     if not orchestrator:
         raise HTTPException(status_code=503, detail="AI Agent is not ready.")
     
+    # Input Validation using GuardrailsAgent
+    if guardrails_agent:
+        guardrails_response = guardrails_agent.invoke(request.message)
+        if guardrails_response.lower().strip() == "yes":
+            return {"response": "I'm sorry, I cannot process that request. It has been identified as potentially harmful."}
+    
     try:
         response = await asyncio.wait_for(
             orchestrator.ainvoke({"input": request.message}),
             timeout=REQUEST_TIMEOUT
         )
         return {"response": response.get('output', "No output from agent.")}
+    except OutputParserException as e:
+        # Handle cases where the LLM output cannot be parsed
+        print(f"!!! OutputParserException: {e}")
+        raw_output = str(e.llm_output) if hasattr(e, 'llm_output') else str(e)
+        return {"response": f"The AI response was malformed. Raw output: {raw_output}"}
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Request timed out.")
     except Exception as e:
