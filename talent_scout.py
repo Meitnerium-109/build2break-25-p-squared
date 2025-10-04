@@ -1,71 +1,105 @@
 # talent_scout.py
-
+import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema.output_parser import StrOutputParser
 
-def create_resume_retriever(pdf_path, embeddings):
+def create_multi_resume_retriever(resumes_dir, embeddings):
     """
-    Creates a retriever for a given resume PDF.
-    
-    This function performs the Load, Split, and Store steps of RAG.
-    1. Loads the PDF.
-    2. Splits the document into smaller chunks.
-    3. Creates embeddings for these chunks.
-    4. Stores them in a FAISS vector store.
-    5. Returns a retriever object which can find relevant chunks.
+    Creates a single, more powerful retriever for all resumes in a directory.
+    It now fetches more documents to ensure all resumes are included.
     """
-    print(f"Processing resume from: {pdf_path}")
-    loader = PyPDFLoader(pdf_path)
-    documents = loader.load()
+    all_docs = []
+    print(f"--- Loading all resumes from: {resumes_dir} ---")
     
-    # Split the document into chunks for effective searching
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    docs = text_splitter.split_documents(documents)
+    if not os.path.exists(resumes_dir):
+        print(f"Warning: Directory '{resumes_dir}' not found. No resumes will be loaded.")
+        return None
+        
+    pdf_files = [f for f in os.listdir(resumes_dir) if f.lower().endswith('.pdf')]
+    if not pdf_files:
+        print(f"Warning: No PDF resumes found in '{resumes_dir}'.")
+        return None
+
+    for pdf_file in pdf_files:
+        pdf_path = os.path.join(resumes_dir, pdf_file)
+        try:
+            print(f"Processing resume: {pdf_file}")
+            loader = PyPDFLoader(pdf_path)
+            documents = loader.load()
+            for doc in documents:
+                doc.metadata["source"] = pdf_file
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            split_docs = text_splitter.split_documents(documents)
+            all_docs.extend(split_docs)
+        except Exception as e:
+            print(f"Error processing {pdf_file}: {e}")
+
+    if not all_docs:
+        print("--- No resume content could be loaded. TalentScout will be disabled. ---")
+        return None
+
+    db = FAISS.from_documents(all_docs, embeddings)
     
-    # Create a FAISS vector store from the document chunks
-    # This is our in-memory "database" of the resume's content
-    db = FAISS.from_documents(docs, embeddings)
+    # --- KEY CHANGE ---
+    # We are now configuring the retriever to fetch more documents (k=15).
+    # This forces it to look at a wider range of information, making it
+    # highly likely to include context from ALL uploaded resumes.
+    retriever = db.as_retriever(search_kwargs={"k": 15})
     
-    # Return the vector store as a retriever
-    # A retriever is a component that can fetch relevant documents
-    print("Resume processed and retriever created.")
-    return db.as_retriever()
+    print(f"--- All {len(pdf_files)} resumes processed. Retriever is ready (Enhanced Fetching). ---")
+    return retriever
 
 def create_talent_scout_chain(retriever, llm):
     """
     Creates the main LangChain chain for the TalentScout agent.
-    
-    This function builds the Retrieve and Generate steps of RAG.
-    1. Defines a prompt template to guide the LLM.
-    2. Sets up a chain that:
-        - Takes a user's question.
-        - Uses the retriever to fetch relevant context from the resume.
-        - Formats the prompt with the context and question.
-        - Sends it to the LLM.
-        - Parses the output.
+    This version has a completely overhauled, stricter prompt for better formatting and completeness.
     """
     
     template = """
-    You are an expert HR assistant named TalentScout. Your task is to analyze the provided resume context and answer the question based ONLY on that context.
-    Do not make up information. If the answer is not in the context, say "The information is not available in the provided resume."
+    You are an expert HR analyst, TalentScout. Your only job is to analyze and rank candidates based on the resume context provided.
 
-    CONTEXT:
+    **CONTEXT FROM RESUMES:**
     {context}
 
-    QUESTION:
+    **USER'S QUESTION:**
     {question}
 
-    ANSWER:
+    **CRITICAL RULES FOR YOUR RESPONSE:**
+    1.  **INCLUDE EVERYONE:** You MUST analyze every candidate found in the context. Do not omit any candidate.
+    2.  **EXTRACT NAME:** You MUST find the full name of each candidate. If a name is not in the resume, you MUST state "Name Not Found".
+    3.  **RANK AND JUSTIFY:** Provide a numbered priority list. For each candidate, you MUST briefly justify your ranking.
+    4.  **STRICT MARKDOWN FORMAT:** Your final output MUST use the exact Markdown format below. Use headings, bold text, and bullet points as shown. Do not use asterisks for lists; use dashes.
+
+    ### Candidate Ranking
+
+    Based on your request, here is the priority order of the candidates:
+
+    ---
+    **1. Candidate Name**
+    - **Source:** `[source_filename.pdf]`
+    - **Justification:** [Explain why this candidate is ranked first based on their skills and experience.]
+    - **Summary:** [Provide a brief summary of the candidate's profile.]
+
+    ---
+    **2. Candidate Name**
+    - **Source:** `[source_filename.pdf]`
+    - **Justification:** [Explain why this candidate is ranked second.]
+    - **Summary:** [Provide a brief summary of the candidate's profile.]
+
+    ---
+    **3. Candidate Name (or Name Not Found)**
+    - **Source:** `[source_filename.pdf]`
+    - **Justification:** [Explain why this candidate is ranked third.]
+    - **Summary:** [Provide a brief summary of the candidate's profile.]
+    
+    (Continue for all other candidates)
     """
     prompt = PromptTemplate.from_template(template)
 
-    # This is the LangChain Expression Language (LCEL) chain
-    # It defines the sequence of operations.
     chain = (
         {"context": retriever, "question": RunnablePassthrough()}
         | prompt
@@ -73,5 +107,5 @@ def create_talent_scout_chain(retriever, llm):
         | StrOutputParser()
     )
     
-    print("TalentScout chain created successfully.")
+    print("TalentScout chain created successfully (Final Overhauled Version).")
     return chain

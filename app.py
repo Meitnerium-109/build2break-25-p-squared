@@ -16,19 +16,21 @@ st.title("Aegis HR - AI Assistant")
 # --- Sidebar for File Upload ---
 with st.sidebar:
     st.header("📄 Resume Screening")
-    uploaded_file = st.file_uploader("Upload a resume (PDF)", type="pdf")
-    if uploaded_file is not None:
+    # Change: Allow multiple files to be uploaded
+    uploaded_files = st.file_uploader("Upload resumes (PDF)", type="pdf", accept_multiple_files=True)
+    if uploaded_files:
         # Ensure the resume directory exists
         if not os.path.exists(RESUME_DIR):
             os.makedirs(RESUME_DIR)
 
-        # Save the uploaded file
-        file_path = os.path.join(RESUME_DIR, "uploaded_resume.pdf")
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-        st.success(f"'{uploaded_file.name}' uploaded successfully! You can now ask the agent to analyze it.")
-        st.info("Example prompt: 'Based on the uploaded resume, is this candidate a good fit for a Senior Python Developer role?'")
+        # Save each uploaded file
+        for uploaded_file in uploaded_files:
+            file_path = os.path.join(RESUME_DIR, uploaded_file.name)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+        
+        st.success(f"{len(uploaded_files)} resume(s) uploaded successfully!")
+        st.info("The AI agent will restart to load the new resumes. You can then ask questions like 'Compare the candidates based on the uploaded resumes.'")
 
 
 # --- Session State Initialization ---
