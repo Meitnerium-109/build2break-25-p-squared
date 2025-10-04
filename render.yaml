@@ -1,4 +1,5 @@
 services:
+  # --- FastAPI Backend ---
   - type: web
     name: aegis-backend
     env: python
@@ -9,6 +10,7 @@ services:
       - key: GOOGLE_API_KEY
         sync: false
 
+  # --- Streamlit Frontend ---
   - type: web
     name: aegis-frontend
     env: python
@@ -17,9 +19,6 @@ services:
     plan: free
     envVars:
       - key: API_BASE_URL
-        fromService:
-          type: web
-          name: aegis-backend
-          property: url
+        value: "http://aegis-backend:8000"   # 👈 Direct link to backend service
       - key: GOOGLE_API_KEY
         sync: false
