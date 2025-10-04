@@ -17,6 +17,7 @@ from vectorstore_manager import VectorStoreManager
 from talent_scout import create_talent_scout_chain
 from onboarder import create_onboarder_chain
 from policy_bot import create_policy_retriever, create_policy_bot_chain
+from bias_checker import create_bias_checker_chain
 from orchestrator import create_orchestrator
 
 # --- Configuration ---
@@ -46,7 +47,7 @@ class DocumentListResponse(BaseModel):
 app = FastAPI(
     title="Aegis HR - Agentic HR Automation (Hardened)",
     description="A robust API for the multi-agent HR system.",
-    version="2.1.0" # Version bump
+    version="2.2.0" # Version bump for bias checker
 )
 
 # --- Global Components ---
@@ -63,15 +64,23 @@ async def startup_event():
     
     retriever = vector_store_manager.get_retriever()
     
-    talent_scout_chain = create_talent_scout_chain(retriever, llm)
+    # --- CORRECTED ORDER OF INITIALIZATION ---
+
+    # 1. Create chains that have no dependencies on other chains
     onboarder_chain = create_onboarder_chain(llm)
     policy_retriever = create_policy_retriever("policies/company_policies.txt", embeddings)
     policy_bot_chain = create_policy_bot_chain(policy_retriever, llm)
+    bias_checker_chain = create_bias_checker_chain(llm) # CREATE BIAS CHECKER FIRST
 
+    # 2. Now create the TalentScout chain, which depends on the bias checker
+    talent_scout_chain = create_talent_scout_chain(retriever, llm, bias_checker_chain)
+    
+    # 3. Finally, create the tools list with all the finished chains
     tools = [
         Tool(name="TalentScout", func=talent_scout_chain.invoke, description="For screening resumes, comparing candidates, and analyzing skills."),
         Tool(name="Onboarder", func=onboarder_chain.invoke, description="For creating onboarding plans."),
         Tool(name="PolicyBot", func=policy_bot_chain.invoke, description="For answering questions about company policies."),
+        Tool(name="BiasChecker", func=bias_checker_chain.invoke, description="For analyzing text to detect potential ethical or demographic bias. Use this to review summaries or justifications created by other tools."),
     ]
 
     memory = ConversationBufferWindowMemory(k=5, memory_key="chat_history", input_key="input", output_key="output", return_messages=True)
