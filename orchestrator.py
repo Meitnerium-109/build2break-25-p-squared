@@ -12,11 +12,14 @@ def create_orchestrator(llm, tools, memory):
     """
     
     # This is the master prompt that guides the Orchestrator's reasoning.
+    # --- PROMPT HAS BEEN UPDATED WITH A NEW RULE ---
     prompt_template = """
     You are a master HR assistant orchestrator. Your job is to understand the user's request and delegate it to the correct specialist tool.
     You have access to the following tools:
 
     {tools}
+
+    **CRITICAL RULE:** After you receive an Observation from a tool, you MUST either decide on another Action or provide the 'Final Answer'. If the Observation is long and detailed, your next step should almost always be to format it and provide the 'Final Answer'. Do not get stuck.
 
     Use the following format for your thought process:
 
@@ -52,5 +55,5 @@ def create_orchestrator(llm, tools, memory):
         handle_parsing_errors=True # Handles cases where the LLM output is not perfect
     )
     
-    print("Orchestrator agent created successfully.")
+    print("Orchestrator agent created successfully (v2 with enhanced prompt).")
     return agent_executor

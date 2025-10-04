@@ -64,7 +64,7 @@ def create_talent_scout_chain(retriever, llm, bias_checker_chain):
     Creates the enhanced TalentScout meta-chain.
     """
     
-    # This is the original TalentScout prompt. It remains unchanged.
+    # --- PROMPT HAS BEEN UPDATED WITH A NEW RULE FOR SPECIFICITY ---
     template = """
     You are an expert HR analyst, TalentScout. Your only job is to analyze and rank candidates based on the resume context provided.
 
@@ -75,28 +75,23 @@ def create_talent_scout_chain(retriever, llm, bias_checker_chain):
     {question}
 
     **CRITICAL RULES FOR YOUR RESPONSE:**
-    1.  **INCLUDE EVERYONE:** You MUST analyze every candidate found in the context. Do not omit any candidate.
-    2.  **EXTRACT NAME:** You MUST find the full name of each candidate. If a name is not in the resume, you MUST state "Name Not Found".
-    3.  **RANK AND JUSTIFY:** Provide a numbered priority list. For each candidate, you MUST briefly justify your ranking.
-    4.  **STRICT MARKDOWN FORMAT:** Your final output MUST use the exact Markdown format below. Use headings, bold text, and dashes for bullet points.
+    1.  **SPECIFICITY:** If the "USER'S QUESTION" asks about a specific person by name, you MUST ONLY provide the analysis for that one person. If the question is general (e.g., "rank all candidates"), then you should analyze everyone found in the context.
+    2.  **INCLUDE EVERYONE (if general):** If the request is general, you MUST analyze every candidate found in the context. Do not omit anyone.
+    3.  **EXTRACT NAME:** You MUST find the full name of each candidate. If a name is not in the resume, you MUST state "Name Not Found".
+    4.  **RANK AND JUSTIFY:** Provide a numbered priority list (if multiple candidates) or a detailed analysis (if a single candidate). For each candidate, you MUST briefly justify your ranking or analysis.
+    5.  **STRICT MARKDOWN FORMAT:** Your final output MUST use the exact Markdown format below. Use headings, bold text, and dashes for bullet points.
 
-    ### Candidate Ranking
+    ### Candidate Analysis
 
-    Based on your request, here is the priority order of the candidates:
+    Based on your request, here is the analysis:
 
     ---
     **1. Candidate Name**
     - **Source:** `[source_filename.pdf]`
-    - **Justification:** [Explain why this candidate is ranked first based on their skills and experience.]
+    - **Justification:** [Explain why this candidate is ranked first/relevant based on their skills and experience.]
     - **Summary:** [Provide a brief summary of the candidate's profile.]
 
-    ---
-    **2. Candidate Name**
-    - **Source:** `[source_filename.pdf]`
-    - **Justification:** [Explain why this candidate is ranked second.]
-    - **Summary:** [Provide a brief summary of the candidate's profile.]
-    
-    (Continue for all other candidates)
+    (Continue for all other relevant candidates if the request was general)
     """
     prompt = PromptTemplate.from_template(template)
 
@@ -108,9 +103,7 @@ def create_talent_scout_chain(retriever, llm, bias_checker_chain):
         | StrOutputParser()
     )
     
-    # --- THIS IS THE FIX ---
-    # Instead of using func_kwargs, we wrap our function call in a lambda.
-    # The 'input_data' is automatically passed by the chain when it runs.
+    # This is the meta-chain that adds the automatic bias check.
     enhanced_chain = RunnableLambda(
         lambda input_data: run_scout_and_bias_check(
             input_data,
@@ -119,5 +112,5 @@ def create_talent_scout_chain(retriever, llm, bias_checker_chain):
         )
     )
     
-    print("TalentScout meta-chain with automatic bias check created successfully.")
+    print("TalentScout meta-chain with automatic bias check created successfully (v2 with specificity).")
     return enhanced_chain
