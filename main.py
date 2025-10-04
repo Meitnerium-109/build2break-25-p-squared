@@ -44,7 +44,7 @@ def main():
         Tool(
             name="Onboarder",
             func=onboarder_chain.invoke,
-            description="Use this tool to create an onboarding plan for a new hire. Input must be a dictionary with keys 'candidate_name' and 'job_title'."
+            description="Use this tool to create an onboarding plan for a new hire. The input should be a single string containing the candidate's full name and their job title."
         ),
         Tool(
             name="PolicyBot",
