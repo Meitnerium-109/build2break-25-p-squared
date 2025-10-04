@@ -7,7 +7,7 @@ import time
 API_BASE_URL = "http://127.0.0.1:8000"
 CHAT_API_URL = f"{API_BASE_URL}/chat"
 UPLOAD_API_URL = f"{API_BASE_URL}/upload"
-DOCS_API_URL = f"{API_BASE_URL}/documents" # New endpoint URL
+DOCS_API_URL = f"{API_BASE_URL}/documents"
 
 AGENT_AVATAR = "🤖"
 USER_AVATAR = "🧑‍💻"
@@ -15,32 +15,23 @@ USER_AVATAR = "🧑‍💻"
 st.set_page_config(page_title="Aegis HR - AI Assistant", page_icon=AGENT_AVATAR)
 st.title("Aegis HR - AI Assistant")
 
-# --- Function to fetch the document list ---
+# --- Functions ---
+
 def get_document_list():
+    """Fetches the list of available documents from the API."""
     try:
         response = requests.get(DOCS_API_URL, timeout=10)
         response.raise_for_status()
-        return response.json().get("documents", [])
+        st.session_state.document_list = response.json().get("documents", [])
     except requests.exceptions.RequestException as e:
         st.sidebar.error(f"Failed to get docs: {e}")
-        return []
+        st.session_state.document_list = []
 
-# --- Session State Initialization ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am Aegis HR. How can I help?"}]
-# Fetch initial document list when the app loads
-if "document_list" not in st.session_state:
-    st.session_state.document_list = get_document_list()
-
-# --- Sidebar ---
-with st.sidebar:
-    st.header("📄 Resume Management")
-    
-    # --- File Uploader ---
-    uploaded_files = st.file_uploader("Upload new resumes (PDF)", type="pdf", accept_multiple_files=True)
-    if uploaded_files:
+def handle_uploads():
+    """Callback function to process uploaded files."""
+    if st.session_state.file_uploader:
         st.info("Uploading and processing files...")
-        for uploaded_file in uploaded_files:
+        for uploaded_file in st.session_state.file_uploader:
             files = {'file': (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
             try:
                 response = requests.post(UPLOAD_API_URL, files=files, timeout=180)
@@ -50,16 +41,35 @@ with st.sidebar:
                     st.error(f"❌ Error with '{uploaded_file.name}': {response.json().get('detail')}")
             except requests.exceptions.RequestException as e:
                 st.error(f"❌ Connection error for '{uploaded_file.name}': {e}")
-        # Refresh the document list after uploads
-        st.session_state.document_list = get_document_list()
-        st.rerun() # Rerun the script to display the new list immediately
+        
+        # After processing, refresh the document list.
+        # The file_uploader widget is automatically cleared after the callback.
+        get_document_list()
+
+# --- Session State Initialization ---
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am Aegis HR. How can I help?"}]
+if "document_list" not in st.session_state:
+    get_document_list()
+
+# --- Sidebar ---
+with st.sidebar:
+    st.header("📄 Resume Management")
+    
+    # File Uploader with the on_change callback
+    st.file_uploader(
+        "Upload new resumes (PDF)", 
+        type="pdf", 
+        accept_multiple_files=True,
+        key="file_uploader",
+        on_change=handle_uploads # <-- THIS IS THE FIX
+    )
 
     st.divider()
 
-    # --- Persistent Document List Display ---
     st.header("Available Resumes")
     if st.button("Refresh List"):
-        st.session_state.document_list = get_document_list()
+        get_document_list()
         st.rerun()
 
     if st.session_state.document_list:
