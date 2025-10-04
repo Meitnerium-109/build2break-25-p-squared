@@ -16,7 +16,7 @@ from langchain.schema.output_parser import OutputParserException
 
 # Local Imports
 from vectorstore_manager import VectorStoreManager
-from talent_scout import create_talent_scout_chain
+from talent_scout import create_talent_scout_chain, Candidate # Import Candidate
 from onboarder import create_onboarder_chain
 from policy_bot import create_policy_retriever, create_policy_bot_chain
 from bias_checker import create_bias_checker_chain
@@ -121,6 +121,50 @@ async def upload_resume(file: UploadFile = File(...)):
     except Exception as e:
         print(f"!!! Critical error during file upload: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+    
+
+# In main.py (temporarily)
+
+@app.get("/debug/vectordb")
+async def debug_vectordb():
+    """
+    Temporary endpoint to inspect the vector database.
+    """
+    collection = vector_store_manager.vector_store._collection
+    data = collection.get(include=["documents"])
+    return data
+
+
+def extract_candidate_info(text: str) -> List[Candidate]:
+    """
+    Extracts candidate information from the LLM's string output using regex.
+    """
+    candidates = []
+    # Split the text into candidate sections based on numbered entries
+    candidate_sections = re.split(r'\n\d+\.\sName:\s', text)[1:]
+
+    for section in candidate_sections:
+        try:
+            # Extract information from each section
+            name_match = re.search(r'(.*?)\s*\* Source:\s', section)
+            name = name_match.group(1).strip() if name_match else "Name Not Found"
+
+            source_match = re.search(r'\* Source:\s(.*?)\s*\* Justification:', section)
+            source = source_match.group(1).strip() if source_match else "Source Not Found"
+
+            justification_match = re.search(r'\* Justification:\s(.*?)\s*\* Summary:', section)
+            justification = justification_match.group(1).strip() if justification_match else "Justification Not Found"
+
+            summary_match = re.search(r'\* Summary:\s(.*?)$', section, re.DOTALL)
+            summary = summary_match.group(1).strip() if summary_match else "Summary Not Found"
+
+            candidate = Candidate(name=name, source=source, justification=justification, summary=summary)
+            candidates.append(candidate)
+        except Exception as e:
+            print(f"Error extracting candidate info: {e}")
+            continue
+
+    return candidates
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -139,6 +183,13 @@ async def chat(request: ChatRequest):
             orchestrator.ainvoke({"input": request.message}),
             timeout=REQUEST_TIMEOUT
         )
+        
+        # Output Validation and Parsing
+        if "TalentScout" in [step[0].name for step in response.get("intermediate_steps", [])]:  # Check if TalentScout was used
+            string_output = response.get("output")
+            candidates = extract_candidate_info(string_output)
+            response["output"] = candidates # Replace with extracted candidates
+
         return {"response": response.get('output', "No output from agent.")}
     except OutputParserException as e:
         # Handle cases where the LLM output cannot be parsed
