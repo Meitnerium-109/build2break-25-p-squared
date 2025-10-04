@@ -43,7 +43,7 @@ This method requires running the backend and frontend services in two separate t
 ### Prerequisites
 *   Python 3.9+
 *   Git
-*   A `GOOGLE_API_KEY` with access to the Generative AI API. Google API key: AIzaSyCPdGy0bERb0CSFcmXkM-8KAIAsw_iuEDw
+*   A `GOOGLE_API_KEY` with access to the Generative AI API. Google API key: AIzaSyAWnDOzn9gaqpFTKU1OmKWL0i_An6xsjgw
 
 ### Step 1: Project Setup
 
@@ -56,7 +56,7 @@ This method requires running the backend and frontend services in two separate t
 2.  **Create the environment file:**
     Create a new file named `.env` in the root of the project directory and add your API key like this:
     ```
-    GOOGLE_API_KEY=AIzaSyCPdGy0bERb0CSFcmXkM-8KAIAsw_iuEDw
+    GOOGLE_API_KEY=AIzaSyAWnDOzn9gaqpFTKU1OmKWL0i_An6xsjgw
     ```
 
 3.  **Create and activate a Python virtual environment:**
