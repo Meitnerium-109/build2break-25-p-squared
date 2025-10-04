@@ -12,7 +12,7 @@ from langchain.memory import ConversationBufferWindowMemory
 from langchain.agents import AgentExecutor
 
 # Import all our specialist agent creators
-from talent_scout import create_resume_retriever, create_talent_scout_chain
+from talent_scout import create_multi_resume_retriever, create_talent_scout_chain
 from onboarder import create_onboarder_chain
 from policy_bot import create_policy_retriever, create_policy_bot_chain
 from orchestrator import create_orchestrator
@@ -47,43 +47,48 @@ async def startup_event():
     
     # Initialize the LLM and Embeddings models
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+    # CORRECTED: Use the correct model name for embeddings
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
-    # --- This is the corrected block ---
-    # It checks which resume to load when the server starts.
-    resume_to_load = "resumes/uploaded_resume.pdf"
-    if not os.path.exists(resume_to_load):
-        print(f"'{resume_to_load}' not found. Loading default 'resumes/sample_resume.pdf' for startup.")
-        resume_to_load = "resumes/sample_resume.pdf"
+    # --- This block is updated to load all resumes ---
+    resumes_directory = "resumes"
+    resume_retriever = create_multi_resume_retriever(resumes_directory, embeddings)
     
-    resume_retriever = create_resume_retriever(resume_to_load, embeddings)
-    # --- End of corrected block ---
-    
-    talent_scout_chain = create_talent_scout_chain(resume_retriever, llm)
+    # Create an empty list for tools first
+    tools = []
+
+    # Only add the TalentScout tool if resumes were successfully loaded
+    if resume_retriever:
+        talent_scout_chain = create_talent_scout_chain(resume_retriever, llm)
+        tools.append(
+            Tool(
+                name="TalentScout",
+                func=talent_scout_chain.invoke,
+                description="Use this tool to screen resumes, compare candidates, and analyze skills based on all uploaded resume contexts. Input should be a detailed question about the candidates."
+            )
+        )
+    else:
+        print("--- TalentScout tool is disabled because no resumes were loaded. ---")
+
     
     onboarder_chain = create_onboarder_chain(llm)
     
     policy_retriever = create_policy_retriever("policies/company_policies.txt", embeddings)
     policy_bot_chain = create_policy_bot_chain(policy_retriever, llm)
 
-    # Define the tools for the orchestrator agent
-    tools = [
-        Tool(
-            name="TalentScout",
-            func=talent_scout_chain.invoke,
-            description="Use this tool to screen resumes and analyze candidates based on the provided resume context. Input should be a detailed question about the candidate's fit for a role."
-        ),
+    # Add the other tools to the list
+    tools.extend([
         Tool(
             name="Onboarder",
             func=onboarder_chain.invoke,
-            description="Use this tool to create an onboarding plan for a new hire. The input should be a single string containing the candidate's full name and their job title."
+            description="Use this tool to create an onboarding plan. The input should be a string containing the candidate's name, job title, and optionally the desired plan duration and word count. Example: 'Jane Doe, Software Engineer, 3 days, 150 words'"
         ),
         Tool(
             name="PolicyBot",
             func=policy_bot_chain.invoke,
-            description="Use this tool to answer questions about company policies. Input should be a direct question about a specific policy from the provided policy document."
+            description="Use this tool to answer questions about company policies. Input should be a direct question about a specific policy."
         ),
-    ]
+    ])
 
     # Create the memory for the conversation
     memory = ConversationBufferWindowMemory(
