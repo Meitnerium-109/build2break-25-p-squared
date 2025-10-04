@@ -13,7 +13,13 @@ AGENT_AVATAR = "🤖"
 USER_AVATAR = "🧑‍💻"
 
 st.set_page_config(page_title="Aegis HR - AI Assistant", page_icon=AGENT_AVATAR)
-st.title("Aegis HR - AI Assistant")
+
+# --- Session State Initialization ---
+if "messages" not in st.session_state:
+    st.title("Aegis HR - AI Assistant")
+    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am Aegis HR. How can I help?"}]
+if "document_list" not in st.session_state:
+    get_document_list()
 
 # --- Functions ---
 
@@ -45,12 +51,6 @@ def handle_uploads():
         # After processing, refresh the document list.
         # The file_uploader widget is automatically cleared after the callback.
         get_document_list()
-
-# --- Session State Initialization ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am Aegis HR. How can I help?"}]
-if "document_list" not in st.session_state:
-    get_document_list()
 
 # --- Sidebar ---
 with st.sidebar:
