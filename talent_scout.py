@@ -2,56 +2,11 @@
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
 from langchain.prompts import PromptTemplate
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema.output_parser import StrOutputParser
 
-def create_multi_resume_retriever(resumes_dir, embeddings):
-    """
-    Creates a single, more powerful retriever for all resumes in a directory.
-    It now fetches more documents to ensure all resumes are included.
-    """
-    all_docs = []
-    print(f"--- Loading all resumes from: {resumes_dir} ---")
-    
-    if not os.path.exists(resumes_dir):
-        print(f"Warning: Directory '{resumes_dir}' not found. No resumes will be loaded.")
-        return None
-        
-    pdf_files = [f for f in os.listdir(resumes_dir) if f.lower().endswith('.pdf')]
-    if not pdf_files:
-        print(f"Warning: No PDF resumes found in '{resumes_dir}'.")
-        return None
-
-    for pdf_file in pdf_files:
-        pdf_path = os.path.join(resumes_dir, pdf_file)
-        try:
-            print(f"Processing resume: {pdf_file}")
-            loader = PyPDFLoader(pdf_path)
-            documents = loader.load()
-            for doc in documents:
-                doc.metadata["source"] = pdf_file
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            split_docs = text_splitter.split_documents(documents)
-            all_docs.extend(split_docs)
-        except Exception as e:
-            print(f"Error processing {pdf_file}: {e}")
-
-    if not all_docs:
-        print("--- No resume content could be loaded. TalentScout will be disabled. ---")
-        return None
-
-    db = FAISS.from_documents(all_docs, embeddings)
-    
-    # --- KEY CHANGE ---
-    # We are now configuring the retriever to fetch more documents (k=15).
-    # This forces it to look at a wider range of information, making it
-    # highly likely to include context from ALL uploaded resumes.
-    retriever = db.as_retriever(search_kwargs={"k": 15})
-    
-    print(f"--- All {len(pdf_files)} resumes processed. Retriever is ready (Enhanced Fetching). ---")
-    return retriever
+# NOTE: This file is now correct and does not import from itself.
 
 def create_talent_scout_chain(retriever, llm):
     """
@@ -72,7 +27,7 @@ def create_talent_scout_chain(retriever, llm):
     1.  **INCLUDE EVERYONE:** You MUST analyze every candidate found in the context. Do not omit any candidate.
     2.  **EXTRACT NAME:** You MUST find the full name of each candidate. If a name is not in the resume, you MUST state "Name Not Found".
     3.  **RANK AND JUSTIFY:** Provide a numbered priority list. For each candidate, you MUST briefly justify your ranking.
-    4.  **STRICT MARKDOWN FORMAT:** Your final output MUST use the exact Markdown format below. Use headings, bold text, and bullet points as shown. Do not use asterisks for lists; use dashes.
+    4.  **STRICT MARKDOWN FORMAT:** Your final output MUST use the exact Markdown format below. Use headings, bold text, and dashes for bullet points.
 
     ### Candidate Ranking
 
